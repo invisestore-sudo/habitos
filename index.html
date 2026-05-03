@@ -3138,7 +3138,20 @@ function AuthedRoutes() {
 function App() {
   return /*#__PURE__*/React.createElement(ThemeProvider, null, /*#__PURE__*/React.createElement(ToastProvider, null, /*#__PURE__*/React.createElement(AuthProvider, null, /*#__PURE__*/React.createElement(HashRouter, null, /*#__PURE__*/React.createElement(AuthedRoutes, null)))));
 }
-ReactDOM.createRoot(document.getElementById('root')).render(/*#__PURE__*/React.createElement(App, null));
+function __mountApp() {
+  ReactDOM.createRoot(document.getElementById('root')).render(/*#__PURE__*/React.createElement(App, null));
+}
+if (document.body.classList.contains('invise-locked')) {
+  var __obs = new MutationObserver(function () {
+    if (!document.body.classList.contains('invise-locked')) {
+      __obs.disconnect();
+      __mountApp();
+    }
+  });
+  __obs.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+} else {
+  __mountApp();
+}
     </script>
   </body>
 </html>
