@@ -1,11 +1,12 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
     <meta name="theme-color" content="#0b1220" />
-    <meta name="description" content="App de hábitos e metas com gamificação." />
-    <title>Hábitos & Metas</title>
+    <meta name="color-scheme" content="light dark" />
+    <meta name="description" content="HabitPlan — app de hábitos e metas com gamificação." />
+    <title>HabitPlan: Hábitos e Metas</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
@@ -378,23 +379,27 @@ function(a,b,c){if(!Vd(b))throw Error(m(200));return Wd(null,a,b,!1,c)};Q.unmoun
   #invise-gate p { margin: 0 0 18px; color: #9090a0; font-size: 14px; line-height: 1.5; }
   #invise-gate input { width: 100%; background: #1a1a25; border: 1px solid rgba(255,255,255,0.08); color: #f0f0f5; border-radius: 10px; padding: 12px 14px; font-size: 15px; font-family: ui-monospace, Consolas, Menlo, monospace; letter-spacing: 1px; text-transform: uppercase; }
   #invise-gate input:focus { outline: none; border-color: #6c63ff; }
-  #invise-gate button { width: 100%; margin-top: 12px; background: #6c63ff; color: #fff; border: 0; border-radius: 10px; padding: 12px; font-size: 15px; font-weight: 600; cursor: pointer; }
-  #invise-gate button:disabled { opacity: 0.6; cursor: wait; }
+  #invise-gate button { width: 100%; margin-top: 12px; background: #6c63ff; color: #fff; border: 0; border-radius: 10px; padding: 12px; font-size: 15px; font-weight: 600; cursor: pointer; transition: background .2s; }
+  #invise-gate button:disabled { opacity: 0.7; cursor: wait; background: #4f48bb; }
   #invise-gate .ig-err { margin-top: 10px; padding: 10px 12px; background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); color: #fca5a5; border-radius: 8px; font-size: 13px; }
+  #invise-gate .ig-loading { margin-top: 10px; height: 3px; background: rgba(108,99,255,0.2); border-radius: 99px; overflow: hidden; display: none; }
+  #invise-gate .ig-loading-bar { height: 100%; width: 40%; background: #6c63ff; border-radius: 99px; animation: ig-slide 1.4s ease-in-out infinite; }
+  @keyframes ig-slide { 0%{transform:translateX(-100%)} 100%{transform:translateX(350%)} }
   #invise-gate .ig-foot { margin-top: 18px; font-size: 12px; color: #9090a0; text-align: center; }
   #invise-gate .ig-foot a { color: #6c63ff; text-decoration: none; }
   body.invise-locked > :not(#invise-gate) { display: none !important; }
 </style>
 <div id="invise-gate">
   <div class="ig-card">
-    <h1>Hábitos & <b>Metas</b></h1>
-    <p>Digite sua chave única para entrar. Você recebe a chave após a compra na <a href="https://invisestore.com" style="color:#6c63ff;">InviseStore</a>.</p>
+    <h1>HabitPlan: Hábitos & <b>Metas</b></h1>
+    <p>Digite sua chave única para entrar. Você recebe a chave após a compra na <a href="https://invise-store.vercel.app" style="color:#6c63ff;">InviseStore</a>.</p>
     <form id="ig-form" autocomplete="off">
       <input id="ig-key" placeholder="INVS-XXXX-XXXX-XXXX" required maxlength="24" />
       <button type="submit" id="ig-submit">Entrar</button>
+      <div class="ig-loading" id="ig-loading"><div class="ig-loading-bar"></div></div>
       <div id="ig-err" class="ig-err" style="display:none;"></div>
     </form>
-    <div class="ig-foot">Não tem chave? <a href="https://invisestore.com">Comprar agora</a></div>
+    <div class="ig-foot">Não tem chave? <a href="https://invise-store.vercel.app">Comprar agora</a></div>
   </div>
 </div>
 <script>
@@ -447,16 +452,22 @@ function(a,b,c){if(!Vd(b))throw Error(m(200));return Wd(null,a,b,!1,c)};Q.unmoun
     e.textContent = msg; e.style.display = 'block';
   }
   async function validate(key, silent) {
+    var controller = new AbortController();
+    var timeoutId = setTimeout(function() { controller.abort(); }, 20000);
     try {
       var r = await fetch(INVISE_API + '/api/validate-key', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key: key, app: APP_NAME, deviceId: deviceId() })
+        body: JSON.stringify({ key: key, app: APP_NAME, deviceId: deviceId() }),
+        signal: controller.signal
       });
+      clearTimeout(timeoutId);
       var data = await r.json();
       return data && data.valid === true ? data : null;
     } catch (e) {
+      clearTimeout(timeoutId);
       if (silent) return 'offline';
-      throw new Error('Sem conexão com o servidor.');
+      if (e.name === 'AbortError') throw new Error('O servidor demorou demais para responder. Verifique sua conexão e tente novamente.');
+      throw new Error('Sem conexão com o servidor. Tente novamente.');
     }
   }
 
@@ -485,6 +496,7 @@ function(a,b,c){if(!Vd(b))throw Error(m(200));return Wd(null,a,b,!1,c)};Q.unmoun
     var key = (input.value || '').trim().toUpperCase();
     if (!key) return;
     btn.disabled = true; btn.textContent = 'Validando...';
+    document.getElementById('ig-loading').style.display = 'block';
     document.getElementById('ig-err').style.display = 'none';
     try {
       var res = await validate(key, false);
@@ -495,6 +507,7 @@ function(a,b,c){if(!Vd(b))throw Error(m(200));return Wd(null,a,b,!1,c)};Q.unmoun
       showErr(e.message || 'Erro ao validar.');
     } finally {
       btn.disabled = false; btn.textContent = 'Entrar';
+      document.getElementById('ig-loading').style.display = 'none';
     }
   });
 })();
@@ -818,6 +831,26 @@ function longestStreak(habit, logs) {
   }
   return best;
 }
+function allHabitsStreak(habits, logs) {
+  if (habits.length === 0) return 0;
+  let streak = 0;
+  let cursor = new Date();
+  const today = todayKey();
+  for (let i = 0; i < 365; i++) {
+    const key = formatYMD(cursor);
+    const scheduled = habits.filter(h => isScheduledOn(h.frequency, cursor));
+    if (scheduled.length > 0) {
+      const completedAll = scheduled.every(h => logs.some(l => l.habitId === h.id && l.date === key));
+      if (!completedAll) {
+        if (streak === 0 && key === today) { cursor = addDays(cursor, -1); continue; }
+        break;
+      }
+      streak++;
+    }
+    cursor = addDays(cursor, -1);
+  }
+  return streak;
+}
 function completionsThisWeek(habit, logs, weekStart = 1) {
   const start = startOfWeek(new Date(), weekStart);
   const end = addDays(start, 7);
@@ -914,11 +947,41 @@ const ACHIEVEMENTS = [{
   emoji: '🌱',
   check: c => c.totalCompletions >= 1
 }, {
+  id: 'habit_duo',
+  name: 'Dupla dinâmica',
+  description: 'Tenha 2 hábitos ativos ao mesmo tempo',
+  emoji: '🤝',
+  check: c => c.habits.filter(h => !h.archivedAt).length >= 2
+}, {
+  id: 'habit_trio',
+  name: 'Trio de elite',
+  description: 'Tenha 3 hábitos ativos ao mesmo tempo',
+  emoji: '🌿',
+  check: c => c.habits.filter(h => !h.archivedAt).length >= 3
+}, {
+  id: 'three_streak',
+  name: 'Três em fila',
+  description: '3 dias consecutivos em qualquer hábito',
+  emoji: '🌤️',
+  check: c => c.longestStreakAny >= 3
+}, {
   id: 'week_warrior',
   name: 'Guerreiro da semana',
   description: '7 dias consecutivos em qualquer hábito',
   emoji: '🔥',
   check: c => c.longestStreakAny >= 7
+}, {
+  id: 'ten_streak',
+  name: 'Maré de vitórias',
+  description: '10 dias consecutivos em qualquer hábito',
+  emoji: '🌊',
+  check: c => c.longestStreakAny >= 10
+}, {
+  id: 'fourteen_streak',
+  name: 'Duas semanas perfeitas',
+  description: '14 dias consecutivos em qualquer hábito',
+  emoji: '💎',
+  check: c => c.longestStreakAny >= 14
 }, {
   id: 'month_master',
   name: 'Mestre do mês',
@@ -926,11 +989,35 @@ const ACHIEVEMENTS = [{
   emoji: '🏅',
   check: c => c.longestStreakAny >= 30
 }, {
+  id: 'forty_two_streak',
+  name: 'Transformação',
+  description: '42 dias consecutivos em qualquer hábito',
+  emoji: '🦋',
+  check: c => c.longestStreakAny >= 42
+}, {
+  id: 'fifty',
+  name: 'Meio século',
+  description: '50 conclusões totais',
+  emoji: '⚡',
+  check: c => c.totalCompletions >= 50
+}, {
   id: 'centurion',
   name: 'Centurião',
   description: '100 conclusões totais',
   emoji: '💯',
   check: c => c.totalCompletions >= 100
+}, {
+  id: 'two_hundred',
+  name: 'Máquina de hábitos',
+  description: '200 conclusões totais',
+  emoji: '🚀',
+  check: c => c.totalCompletions >= 200
+}, {
+  id: 'five_hundred',
+  name: 'Lendário',
+  description: '500 conclusões totais',
+  emoji: '👑',
+  check: c => c.totalCompletions >= 500
 }, {
   id: 'goal_getter',
   name: 'Realizador',
@@ -944,11 +1031,23 @@ const ACHIEVEMENTS = [{
   emoji: '🏆',
   check: c => c.goals.filter(g => g.completedAt).length >= 3
 }, {
+  id: 'goal_five',
+  name: 'Conquistador',
+  description: 'Conclua 5 metas',
+  emoji: '🎪',
+  check: c => c.goals.filter(g => g.completedAt).length >= 5
+}, {
   id: 'collector',
   name: 'Colecionador',
   description: 'Tenha 5 hábitos ativos ao mesmo tempo',
   emoji: '📚',
   check: c => c.habits.filter(h => !h.archivedAt).length >= 5
+}, {
+  id: 'level_3',
+  name: 'Começando bem',
+  description: 'Alcance o nível 3',
+  emoji: '✨',
+  check: c => c.user.level >= 3
 }, {
   id: 'level_5',
   name: 'Em ascensão',
@@ -961,6 +1060,18 @@ const ACHIEVEMENTS = [{
   description: 'Alcance o nível 10',
   emoji: '🌟',
   check: c => c.user.level >= 10
+}, {
+  id: 'level_15',
+  name: 'Mestre do XP',
+  description: 'Alcance o nível 15',
+  emoji: '🌙',
+  check: c => c.user.level >= 15
+}, {
+  id: 'level_20',
+  name: 'Além dos limites',
+  description: 'Alcance o nível 20',
+  emoji: '🌠',
+  check: c => c.user.level >= 20
 }];
 function evaluateAchievements(ctx) {
   const owned = new Set(ctx.user.badges);
@@ -1511,7 +1622,7 @@ function Pill({
   }, children);
 }
 const COLORS = ['#2ea0ff', '#7c3aed', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#06b6d4', '#84cc16'];
-const EMOJIS = ['✅', '💧', '🏃', '📚', '🧘', '💪', '🥗', '🛌', '💻', '🎯', '🎨', '✍️', '🧠', '🎵', '🌱', '☀️', '🦷', '💊', '🚴', '📵'];
+const EMOJIS = ['✅', '💧', '🏃', '📚', '🧘', '💪', '🥗', '🛌', '💻', '🎯', '🎨', '✍️', '🧠', '🎵', '🌱', '☀️', '🦷', '💊', '🚴', '📵', '🏋️', '🧗', '🤸', '⚽', '🏊', '🚶', '🧹', '🍎', '🥦', '🫖', '☕', '🍵', '🥤', '🎮', '📝', '🗒️', '🗓️', '⏰', '💡', '🔑', '🌙', '🌞', '❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍', '⭐', '🌟', '🏆', '🎖️', '🥇', '🎁', '🎉', '🔥', '⚡', '🌈', '🦋', '🌸', '🌺', '🍀', '🌿', '🌊', '⛰️', '🏔️', '🗺️', '✈️', '🚀', '💰', '💳', '🏠', '🔬', '🧪', '📊', '📈', '🤝', '👥', '🐕', '🐈', '🙏', '😊', '💪'];
 
 /* ---------------- charts ---------------- */
 function ProgressRing({
@@ -1704,6 +1815,108 @@ function LineChart({
     strokeLinejoin: "round",
     strokeLinecap: "round"
   }));
+}
+
+function HabitsCalendar({
+  habits,
+  logs
+}) {
+  const data = useMemo(() => {
+    const today = new Date();
+    const result = [];
+    for (let i = 29; i >= 0; i--) {
+      const d = addDays(today, -i);
+      const key = formatYMD(d);
+      const scheduled = habits.filter(h => isScheduledOn(h.frequency, d));
+      const total = scheduled.length;
+      const done = logs.filter(l => l.date === key && scheduled.some(h => h.id === l.habitId)).length;
+      result.push({ date: key, day: d.getDate(), weekday: d.getDay(), total, done, isToday: i === 0 });
+    }
+    return result;
+  }, [habits, logs]);
+  const firstWeekday = data.length > 0 ? data[0].weekday : 0;
+  const dayLabels = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    className: "grid grid-cols-7 gap-1 mb-1"
+  }, dayLabels.map(d => /*#__PURE__*/React.createElement("div", {
+    key: d,
+    className: "text-center text-[9px] uppercase tracking-wide text-slate-400"
+  }, d))), /*#__PURE__*/React.createElement("div", {
+    className: "grid grid-cols-7 gap-1"
+  }, Array.from({
+    length: firstWeekday
+  }).map((_, i) => /*#__PURE__*/React.createElement("div", {
+    key: `e${i}`
+  })), data.map(({
+    date,
+    day,
+    total,
+    done,
+    isToday
+  }) => {
+    const ratio = total === 0 ? null : done / total;
+    const bg = total === 0 ? 'bg-slate-100 dark:bg-slate-800/40' : ratio >= 1 ? 'bg-emerald-500 dark:bg-emerald-600' : ratio > 0 ? 'bg-brand-400' : 'bg-slate-200 dark:bg-slate-700';
+    const textColor = total === 0 ? 'text-slate-400 dark:text-slate-600' : ratio > 0 ? 'text-white' : 'text-slate-500 dark:text-slate-400';
+    return /*#__PURE__*/React.createElement("div", {
+      key: date,
+      title: total > 0 ? `${date}: ${done}/${total}` : date,
+      className: `rounded-lg ${isToday ? 'ring-2 ring-brand-500' : ''}`
+    }, /*#__PURE__*/React.createElement("div", {
+      className: `rounded-md ${bg} py-1 px-0.5 min-h-[2.75rem] flex flex-col items-center justify-center gap-0.5`
+    }, /*#__PURE__*/React.createElement("div", {
+      className: `text-[10px] font-bold ${textColor}`
+    }, day), total > 0 && /*#__PURE__*/React.createElement("div", {
+      className: `text-[8px] font-semibold ${textColor} opacity-90`
+    }, `${done}/${total}`)));
+  })));
+}
+function HabitsCompletionBars({
+  habits,
+  logs
+}) {
+  const data = useMemo(() => {
+    const dateSet = new Set(lastNDays(30));
+    return habits.map(h => {
+      const scheduled = Array.from(dateSet).filter(s => isScheduledOn(h.frequency, new Date(s + 'T12:00:00'))).length;
+      const done = logs.filter(l => l.habitId === h.id && dateSet.has(l.date)).length;
+      const ratio = scheduled === 0 ? 0 : Math.min(1, done / scheduled);
+      return { h, done, total: scheduled, ratio };
+    }).filter(d => d.total > 0).sort((a, b) => b.ratio - a.ratio);
+  }, [habits, logs]);
+  if (data.length === 0) return /*#__PURE__*/React.createElement("div", {
+    className: "text-sm text-slate-500 py-4 text-center"
+  }, "Nenhum dado ainda.");
+  return /*#__PURE__*/React.createElement("div", {
+    className: "space-y-3"
+  }, data.map(({
+    h,
+    done,
+    total,
+    ratio
+  }) => /*#__PURE__*/React.createElement("div", {
+    key: h.id,
+    className: "flex items-center gap-3"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "text-xl w-7 text-center flex-shrink-0"
+  }, h.emoji), /*#__PURE__*/React.createElement("div", {
+    className: "flex-1 min-w-0"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center justify-between mb-1"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "text-sm font-medium truncate"
+  }, h.name), /*#__PURE__*/React.createElement("span", {
+    className: "text-xs text-slate-500 ml-2 flex-shrink-0"
+  }, `${done}/${total}`)), /*#__PURE__*/React.createElement("div", {
+    className: "h-2.5 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "h-full rounded-full transition-all duration-700",
+    style: {
+      width: `${ratio * 100}%`,
+      backgroundColor: h.color
+    }
+  }))), /*#__PURE__*/React.createElement("span", {
+    className: "text-xs font-semibold w-10 text-right flex-shrink-0"
+  }, `${Math.round(ratio * 100)}%`))));
 }
 
 /* ---------------- HabitCard / GoalCard ---------------- */
@@ -1988,6 +2201,10 @@ function GoalForm({
       setError('Valor alvo precisa ser diferente do inicial');
       return;
     }
+    if (kind === 'tasks' && subtasks.length === 0) {
+      setError('Adicione pelo menos uma subtarefa');
+      return;
+    }
     onSave({
       id: initial?.id,
       title: title.trim(),
@@ -2086,7 +2303,7 @@ function GoalForm({
     placeholder: "kg, R$, livros, km..."
   }))) : /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     className: "mb-1.5 text-sm font-medium text-slate-700 dark:text-slate-300"
-  }, "Subtarefas"), /*#__PURE__*/React.createElement("div", {
+  }, "Subtarefas ", /*#__PURE__*/React.createElement("span", {className: "text-rose-500"}, "*")), error && subtasks.length === 0 && /*#__PURE__*/React.createElement("p", {className: "mb-1.5 text-xs text-rose-500"}, error), /*#__PURE__*/React.createElement("div", {
     className: "space-y-1.5"
   }, subtasks.map(s => /*#__PURE__*/React.createElement("div", {
     key: s.id,
@@ -2137,11 +2354,24 @@ function GoalForm({
 
 /* ---------------- pages ---------------- */
 function LoginPage() {
-  // Login por email/senha foi substituído pelo Invise Gate (chave única).
-  // Se alguém cair aqui (ex: após logout), limpamos a chave e recarregamos.
+  // Com o Invise Gate o usuário não faz login manualmente.
+  // Se cair aqui (sessão não encontrada), repara a sessão e recarrega.
   useEffect(() => {
     try {
-      localStorage.removeItem('invise.key');
+      var key = localStorage.getItem('invise.key');
+      if (key) {
+        var h = 0;
+        for (var i2 = 0; i2 < key.length; i2++) h = ((h << 5) - h) + key.charCodeAt(i2) | 0;
+        var uid = 'invise-' + Math.abs(h).toString(36);
+        var usersRaw = localStorage.getItem('hm.v1.users');
+        var users = [];
+        try { users = usersRaw ? JSON.parse(usersRaw) : []; } catch (_e) {}
+        if (!users.find(function(u) { return u.id === uid; })) {
+          users.push({ id: uid, name: 'Você', email: uid + '@invise.local', xp: 0, level: 1, badges: [], preferences: { theme: 'system', weekStart: 1 }, createdAt: new Date().toISOString() });
+          localStorage.setItem('hm.v1.users', JSON.stringify(users));
+        }
+        localStorage.setItem('hm.v1.session', JSON.stringify(uid));
+      }
     } catch (e) {}
     location.reload();
   }, []);
@@ -2149,7 +2379,7 @@ function LoginPage() {
     className: "grid min-h-[100dvh] place-items-center"
   }, /*#__PURE__*/React.createElement("div", {
     className: "text-sm text-slate-500"
-  }, "Saindo\u2026"));
+  }, "Carregando\u2026"));
 }
 function _LoginPageDisabled() {
   const {
@@ -2248,11 +2478,12 @@ function DashboardPage() {
   const [habitOpen, setHabitOpen] = useState(false);
   const [goalOpen, setGoalOpen] = useState(false);
   const today = todayKey();
-  const todayHabits = habits;
+  const todayHabits = useMemo(() => habits.filter(h => isScheduledOn(h.frequency, new Date())), [habits]);
   const completedToday = useMemo(() => todayHabits.filter(h => isCompleted(h.id, today)).length, [todayHabits, today]);
   const todayRatio = todayHabits.length ? completedToday / todayHabits.length : 0;
   const lp = user ? levelProgress(user.xp) : null;
   const activeGoals = goals.filter(g => !g.completedAt).slice(0, 3);
+  const dailyStreak = useMemo(() => allHabitsStreak(habits, logs), [habits, logs]);
   const greeting = (() => {
     const h = new Date().getHours();
     if (h < 6) return 'Boa madrugada';
@@ -2316,7 +2547,9 @@ function DashboardPage() {
     habit: h,
     logs: logs,
     dateKey: today
-  })))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(SectionTitle, null, "Resumo da semana"), /*#__PURE__*/React.createElement(Card, null, /*#__PURE__*/React.createElement(WeeklyBars, {
+  })))), dailyStreak > 0 && /*#__PURE__*/React.createElement(Card, {
+    className: "flex items-center gap-4 bg-gradient-to-br from-amber-500 to-orange-600 text-white border-0"
+  }, /*#__PURE__*/React.createElement("div", {className: "text-4xl"}, "🔥"), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {className: "text-2xl font-extrabold leading-none"}, dailyStreak, " ", dailyStreak === 1 ? "dia" : "dias"), /*#__PURE__*/React.createElement("div", {className: "text-sm opacity-90 mt-0.5"}, "dias consecutivos completando todos os hábitos"))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(SectionTitle, null, "Resumo da semana"), /*#__PURE__*/React.createElement(Card, null, /*#__PURE__*/React.createElement(WeeklyBars, {
     logs: logs,
     weekStart: user?.preferences.weekStart ?? 1
   }))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(SectionTitle, {
@@ -2355,7 +2588,6 @@ function HabitsPage() {
   } = useData();
   const [open, setOpen] = useState(false);
   const todaysHabits = useMemo(() => habits.filter(h => isScheduledOn(h.frequency, new Date())), [habits]);
-  const others = useMemo(() => habits.filter(h => !isScheduledOn(h.frequency, new Date())), [habits]);
   return /*#__PURE__*/React.createElement("div", {
     className: "space-y-5"
   }, /*#__PURE__*/React.createElement("div", {
@@ -2379,17 +2611,11 @@ function HabitsPage() {
     key: h.id,
     habit: h,
     logs: logs
-  }))), others.length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(SectionTitle, null, "Outros dias"), /*#__PURE__*/React.createElement("div", {
-    className: "space-y-2"
-  }, others.map(h => /*#__PURE__*/React.createElement(HabitCard, {
-    key: h.id,
-    habit: h,
-    logs: logs
-  }))))), /*#__PURE__*/React.createElement(HabitForm, {
+  }))), /*#__PURE__*/React.createElement(HabitForm, {
     open: open,
     onClose: () => setOpen(false),
     onSave: h => saveHabit(h)
-  }));
+  })));
 }
 function StatBox({
   label,
@@ -2482,6 +2708,9 @@ function HabitDetailPage({
   }), /*#__PURE__*/React.createElement(StatBox, {
     label: "Semana",
     value: `${Math.round(weekRatio * expected)}/${expected}`
+  }), /*#__PURE__*/React.createElement(SimpleStat, {
+    label: "Streak completo",
+    value: dailyStreakStat + " 🔥"
   })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(SectionTitle, null, "\xDAltimos 30 dias"), /*#__PURE__*/React.createElement(Card, null, /*#__PURE__*/React.createElement("div", {
     className: "grid grid-cols-10 gap-1.5"
   }, last30.map(d => {
@@ -2771,17 +3000,8 @@ function StatsPage() {
   const totalCompletions = logs.length;
   const longestAny = useMemo(() => habits.reduce((m, h) => Math.max(m, longestStreak(h, logs)), 0), [habits, logs]);
   const currentBest = useMemo(() => habits.reduce((m, h) => Math.max(m, currentStreak(h, logs)), 0), [habits, logs]);
-  const series = useMemo(() => {
-    const days = 30;
-    return Array.from({
-      length: days
-    }).map((_, i) => {
-      const d = addDays(new Date(), -(days - 1 - i));
-      const key = formatYMD(d);
-      return logs.filter(l => l.date === key).length;
-    });
-  }, [logs]);
   const goalCompleted = goals.filter(g => g.completedAt).length;
+  const dailyStreakStat = allHabitsStreak(habits, logs);
   const habitsRanking = useMemo(() => {
     return [...habits].map(h => ({
       h,
@@ -2802,7 +3022,7 @@ function StatsPage() {
   }, /*#__PURE__*/React.createElement("h1", {
     className: "text-2xl font-extrabold tracking-tight"
   }, "Estat\xEDsticas"), /*#__PURE__*/React.createElement("div", {
-    className: "grid grid-cols-2 gap-2 sm:grid-cols-4"
+    className: "grid grid-cols-2 gap-2 sm:grid-cols-3"
   }, /*#__PURE__*/React.createElement(SimpleStat, {
     label: "Conclus\xF5es",
     value: totalCompletions,
@@ -2817,15 +3037,18 @@ function StatsPage() {
     label: "Metas feitas",
     value: goalCompleted,
     emoji: "\uD83C\uDFAF"
-  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(SectionTitle, null, "\xDAltimos 30 dias"), /*#__PURE__*/React.createElement(Card, null, /*#__PURE__*/React.createElement(LineChart, {
-    series: series
+  }), /*#__PURE__*/React.createElement(SimpleStat, {
+    label: "Streak de dias completos",
+    value: dailyStreakStat + " 🔥"
+  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(SectionTitle, null, "Calend\xE1rio (30 dias)"), /*#__PURE__*/React.createElement(Card, null, /*#__PURE__*/React.createElement(HabitsCalendar, {
+    habits: habits,
+    logs: logs
   }))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(SectionTitle, null, "Esta semana"), /*#__PURE__*/React.createElement(Card, null, /*#__PURE__*/React.createElement(WeeklyBars, {
     logs: logs,
     weekStart: user?.preferences.weekStart ?? 1
-  }))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(SectionTitle, null, "Mapa de calor (12 semanas)"), /*#__PURE__*/React.createElement(Card, null, /*#__PURE__*/React.createElement(Heatmap, {
+  }))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(SectionTitle, null, "Conclus\xF5es por h\xE1bito (30 dias)"), /*#__PURE__*/React.createElement(Card, null, /*#__PURE__*/React.createElement(HabitsCompletionBars, {
     habits: habits,
-    logs: logs,
-    days: 84
+    logs: logs
   }))), habitsRanking.length > 0 && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(SectionTitle, null, "Top h\xE1bitos"), /*#__PURE__*/React.createElement("div", {
     className: "space-y-2"
   }, habitsRanking.map(({
@@ -2868,7 +3091,7 @@ function SimpleStat({
 function ProfilePage() {
   const {
     user,
-    logout
+    refresh
   } = useAuth();
   const {
     theme,
@@ -2880,8 +3103,19 @@ function ProfilePage() {
     logs
   } = useData();
   const [confirmReset, setConfirmReset] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editPhoto, setEditPhoto] = useState('');
   if (!user) return null;
   const lp = levelProgress(user.xp);
+  const openEdit = () => { setEditName(user.name); setEditPhoto(user.photoUrl || ''); setEditOpen(true); };
+  const saveProfile = () => {
+    const trimmed = editName.trim();
+    if (!trimmed) return;
+    updateUser({ ...user, name: trimmed, photoUrl: editPhoto.trim() || undefined });
+    refresh();
+    setEditOpen(false);
+  };
   const unlocked = new Set(user.badges);
   const exportData = () => {
     const payload = {
@@ -2941,15 +3175,22 @@ function ProfilePage() {
     className: "text-2xl font-extrabold tracking-tight"
   }, "Perfil"), /*#__PURE__*/React.createElement(Card, {
     className: "flex items-center gap-4"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "grid h-14 w-14 place-items-center rounded-2xl bg-gradient-to-br from-brand-500 to-brand-700 text-2xl font-bold text-white"
+  }, user.photoUrl ? /*#__PURE__*/React.createElement("img", {
+    src: user.photoUrl,
+    alt: user.name,
+    className: "h-14 w-14 rounded-2xl object-cover flex-shrink-0"
+  }) : /*#__PURE__*/React.createElement("div", {
+    className: "grid h-14 w-14 place-items-center rounded-2xl bg-gradient-to-br from-brand-500 to-brand-700 text-2xl font-bold text-white flex-shrink-0"
   }, user.name.slice(0, 1).toUpperCase()), /*#__PURE__*/React.createElement("div", {
     className: "min-w-0 flex-1"
   }, /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center gap-2"
+  }, /*#__PURE__*/React.createElement("div", {
     className: "truncate text-lg font-bold"
-  }, user.name), /*#__PURE__*/React.createElement("div", {
-    className: "truncate text-sm text-slate-500 dark:text-slate-400"
-  }, user.email), /*#__PURE__*/React.createElement("div", {
+  }, user.name), /*#__PURE__*/React.createElement("button", {
+    onClick: openEdit,
+    className: "flex-shrink-0 text-xs text-slate-400 hover:text-brand-500 transition"
+  }, "✏️")), /*#__PURE__*/React.createElement("div", {
     className: "mt-2"
   }, /*#__PURE__*/React.createElement("div", {
     className: "flex items-center justify-between text-xs"
@@ -2992,32 +3233,15 @@ function ProfilePage() {
     key: t,
     onClick: () => setTheme(t),
     className: `h-10 rounded-xl text-sm font-medium transition ${theme === t ? 'bg-brand-50 text-brand-700 dark:bg-brand-900/40 dark:text-brand-200' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'}`
-  }, t === 'light' ? '☀️ Claro' : t === 'dark' ? '🌙 Escuro' : '💻 Sistema'))))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(SectionTitle, null, "Dados"), /*#__PURE__*/React.createElement("div", {
-    className: "flex flex-wrap gap-2"
-  }, /*#__PURE__*/React.createElement(Button, {
-    variant: "secondary",
-    onClick: exportData
-  }, "\u2B07\uFE0F Exportar JSON"), /*#__PURE__*/React.createElement(Button, {
-    variant: "secondary",
-    onClick: exportCalendar
-  }, "\uD83D\uDCC5 Exportar metas (.ics)"), /*#__PURE__*/React.createElement(Button, {
-    variant: "danger",
-    onClick: () => setConfirmReset(true)
-  }, "\u267B\uFE0F Limpar dados"))), /*#__PURE__*/React.createElement(Button, {
-    variant: "ghost",
-    onClick: logout,
-    block: true
-  }, "Sair da conta"), /*#__PURE__*/React.createElement("p", {
+  }, t === 'light' ? '☀️ Claro' : t === 'dark' ? '🌙 Escuro' : '💻 Sistema'))))),
+ /*#__PURE__*/React.createElement("p", {
     className: "pb-2 text-center text-xs text-slate-400"
-  }, "v1.0.0 \u2014 feito com \u2615 e dedica\xE7\xE3o"), /*#__PURE__*/React.createElement(Confirm, {
-    open: confirmReset,
-    onClose: () => setConfirmReset(false),
-    title: "Apagar todos os dados?",
-    description: "H\xE1bitos, metas e hist\xF3rico ser\xE3o removidos. Sua conta permanece.",
-    confirmLabel: "Apagar",
-    destructive: true,
-    onConfirm: resetData
-  }));
+  }, "v2.0 \u2014 Feito por InviseStore"), /*#__PURE__*/React.createElement(Modal, {
+    open: editOpen,
+    onClose: () => setEditOpen(false),
+    title: "Editar perfil",
+    footer: /*#__PURE__*/React.createElement("div", {className: "flex justify-end gap-2"}, /*#__PURE__*/React.createElement(Button, {variant: "ghost", onClick: () => setEditOpen(false)}, "Cancelar"), /*#__PURE__*/React.createElement(Button, {onClick: saveProfile}, "Salvar"))
+  }, /*#__PURE__*/React.createElement("div", {className: "space-y-4"}, editPhoto && /*#__PURE__*/React.createElement("div", {className: "mb-3 flex justify-center"}, /*#__PURE__*/React.createElement("img", {src: editPhoto, alt: "preview", className: "h-20 w-20 rounded-2xl object-cover border-2 border-brand-300", onError: e => { e.target.style.display = 'none'; }})), /*#__PURE__*/React.createElement(Input, {label: "URL da foto de perfil", value: editPhoto, onChange: e => setEditPhoto(e.target.value), placeholder: "https://exemplo.com/foto.jpg"}), /*#__PURE__*/React.createElement(Input, {label: "Nome", value: editName, onChange: e => setEditName(e.target.value), placeholder: "Seu nome"}))));
 }
 
 /* ---------------- layout / app shell ---------------- */
