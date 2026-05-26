@@ -410,6 +410,34 @@ function(a,b,c){if(!Vd(b))throw Error(m(200));return Wd(null,a,b,!1,c)};Q.unmoun
   var LS_KEY = 'invise.key';
   var PREFIX = 'hm.v1.';
 
+  // ╔══════════════════════════════════════════════════════════════╗
+  // ║  TEMPORARY BYPASS — remover este bloco para reativar gate  ║
+  // ╚══════════════════════════════════════════════════════════════╝
+  (function bypassGate() {
+    var uid = 'invise-bypass';
+    var usersRaw = localStorage.getItem(PREFIX + 'users');
+    var users = [];
+    try { users = usersRaw ? JSON.parse(usersRaw) : []; } catch(e) {}
+    if (!users.find(function(u) { return u.id === uid; })) {
+      users.push({
+        id: uid, name: 'Usuário',
+        email: 'bypass@local',
+        passwordHash: '', salt: '',
+        createdAt: new Date().toISOString(),
+        xp: 0, level: 1, badges: [],
+        preferences: { theme: 'system', weekStart: 1 }
+      });
+      localStorage.setItem(PREFIX + 'users', JSON.stringify(users));
+    }
+    localStorage.setItem(PREFIX + 'session', JSON.stringify(uid));
+    window.__INVISE_KEY = 'BYPASS';
+    window.__INVISE_USER = uid;
+    var g = document.getElementById('invise-gate'); if (g) g.remove();
+    return;
+  })();
+  return; // TEMPORARY BYPASS — apagar esta linha para reativar
+  // ═══════════════════ FIM DO BYPASS ═══════════════════════════
+
   document.body.classList.add('invise-locked');
 
   function deviceId() {
