@@ -1791,7 +1791,7 @@ function Pill({
   }, children);
 }
 const COLORS = ['#2ea0ff', '#7c3aed', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#06b6d4', '#84cc16'];
-const EMOJIS = ['✅', '💧', '🏃', '📚', '🧘', '💪', '🥗', '🛌', '💻', '🎯', '🎨', '✍️', '🧠', '🎵', '🌱', '☀️', '🦷', '💊', '🚴', '📵', '🏋️', '🧗', '🤸', '⚽', '🏊', '🚶', '🧹', '🍎', '🥦', '🫖', '☕', '🍵', '🥤', '🎮', '📝', '🗒️', '🗓️', '⏰', '💡', '🔑', '🌙', '🌞', '❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍', '⭐', '🌟', '🏆', '🎖️', '🥇', '🎁', '🎉', '🔥', '⚡', '🌈', '🦋', '🌸', '🌺', '🍀', '🌿', '🌊', '⛰️', '🏔️', '🗺️', '✈️', '🚀', '💰', '💳', '🏠', '🔬', '🧪', '📊', '📈', '🤝', '👥', '🐕', '🐈', '🙏', '😊', '💪'];
+const EMOJIS = ['✅', '💧', '🏃', '💪', '📚', '🧘', '🥗', '🛌', '💻', '🎯', '🌱', '☀️', '💊', '☕', '📝', '🙏', '❤️', '💰'];
 
 /* ---------------- charts ---------------- */
 function ProgressRing({
@@ -2095,7 +2095,10 @@ function HabitCard({
   dateKey
 }) {
   const {
-    toggleHabit
+    toggleHabit,
+    saveHabit,
+    archiveHabit,
+    deleteHabit
   } = useData();
   const key = dateKey ?? todayKey();
   const done = isCompleted(habit.id, key);
@@ -2103,20 +2106,36 @@ function HabitCard({
   const weekRatio = weeklyCompletionRatio(habit, logs);
   const expected = expectedThisWeek(habit.frequency);
   const freqLabel = habit.frequency.type === 'daily' ? 'Diário' : habit.frequency.type === 'weekly' ? `${habit.frequency.timesPerWeek}× por semana` : `${habit.frequency.weekdays.length} dias/sem`;
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [edit, setEdit] = useState(false);
+  const [confirmDel, setConfirmDel] = useState(false);
+  const toggle = () => toggleHabit(habit, key);
+  const menuItem = (label, onClick, danger) => /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    onClick,
+    className: `flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition hover:bg-slate-100 dark:hover:bg-slate-700 ${danger ? 'text-red-600 dark:text-red-400' : 'text-slate-700 dark:text-slate-200'}`
+  }, label);
   return /*#__PURE__*/React.createElement("div", {
-    className: `group relative overflow-hidden rounded-2xl border bg-white p-4 transition-all dark:bg-slate-900 ${done ? 'border-emerald-300 ring-1 ring-emerald-200 dark:border-emerald-700 dark:ring-emerald-900/40' : 'border-slate-200/70 dark:border-slate-800/70'}`
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "flex items-center gap-3"
-  }, /*#__PURE__*/React.createElement("button", {
-    onClick: () => toggleHabit(habit, key),
+    onClick: toggle,
+    role: "button",
+    tabIndex: 0,
     "aria-pressed": done,
     "aria-label": done ? 'Desfazer conclusão' : 'Marcar como concluído',
-    className: `relative grid h-12 w-12 flex-shrink-0 place-items-center rounded-2xl text-2xl transition-transform active:scale-90 ${done ? 'animate-pop bg-emerald-500 text-white shadow-lg shadow-emerald-500/30' : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700'}`,
+    onKeyDown: e => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        toggle();
+      }
+    },
+    className: `group relative cursor-pointer select-none overflow-hidden rounded-2xl border bg-white p-4 transition-all dark:bg-slate-900 ${done ? 'border-emerald-300 ring-1 ring-emerald-200 dark:border-emerald-700 dark:ring-emerald-900/40' : 'border-slate-200/70 hover:border-slate-300 dark:border-slate-800/70 dark:hover:border-slate-700'}`
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center gap-3"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: `relative grid h-12 w-12 flex-shrink-0 place-items-center rounded-2xl text-2xl transition-transform ${done ? 'animate-pop bg-emerald-500 text-white shadow-lg shadow-emerald-500/30' : 'bg-slate-100 dark:bg-slate-800'}`,
     style: {
       color: done ? undefined : habit.color
     }
-  }, done ? '✓' : habit.emoji), /*#__PURE__*/React.createElement(Link, {
-    to: `/habits/${habit.id}`,
+  }, done ? '✓' : habit.emoji), /*#__PURE__*/React.createElement("div", {
     className: "min-w-0 flex-1"
   }, /*#__PURE__*/React.createElement("div", {
     className: "flex items-center gap-2"
@@ -2135,7 +2154,46 @@ function HabitCard({
     color: habit.color
   }, /*#__PURE__*/React.createElement("span", {
     className: "text-[10px] font-bold"
-  }, Math.round(weekRatio * 100), "%"))));
+  }, Math.round(weekRatio * 100), "%")), /*#__PURE__*/React.createElement("div", {
+    className: "relative flex-shrink-0",
+    onClick: e => e.stopPropagation()
+  }, /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    onClick: () => setMenuOpen(o => !o),
+    "aria-label": "Op\xE7\xF5es do h\xE1bito",
+    "aria-haspopup": true,
+    "aria-expanded": menuOpen,
+    className: "grid h-9 w-9 place-items-center rounded-xl text-xl leading-none text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+  }, "⋮"), menuOpen && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    className: "fixed inset-0 z-10",
+    onClick: () => setMenuOpen(false)
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "absolute right-0 top-11 z-20 w-44 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-800"
+  }, menuItem("✏️ Editar", () => {
+    setMenuOpen(false);
+    setEdit(true);
+  }), menuItem("📦 Arquivar", () => {
+    setMenuOpen(false);
+    archiveHabit(habit.id);
+  }), menuItem("🗑 Excluir", () => {
+    setMenuOpen(false);
+    setConfirmDel(true);
+  }, true))))), /*#__PURE__*/React.createElement("div", {
+    onClick: e => e.stopPropagation()
+  }, /*#__PURE__*/React.createElement(HabitForm, {
+    open: edit,
+    onClose: () => setEdit(false),
+    onSave: h => saveHabit(h),
+    initial: habit
+  }), /*#__PURE__*/React.createElement(Confirm, {
+    open: confirmDel,
+    onClose: () => setConfirmDel(false),
+    title: "Excluir h\xE1bito?",
+    description: "Essa a\xE7\xE3o remove o h\xE1bito e todo o hist\xF3rico. N\xE3o pode ser desfeita.",
+    confirmLabel: "Excluir",
+    destructive: true,
+    onConfirm: () => deleteHabit(habit.id)
+  })));
 }
 function GoalCard({
   goal
@@ -2877,9 +2935,6 @@ function HabitDetailPage({
   }), /*#__PURE__*/React.createElement(StatBox, {
     label: "Semana",
     value: `${Math.round(weekRatio * expected)}/${expected}`
-  }), /*#__PURE__*/React.createElement(SimpleStat, {
-    label: "Streak completo",
-    value: dailyStreakStat + " 🔥"
   })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(SectionTitle, null, "\xDAltimos 30 dias"), /*#__PURE__*/React.createElement(Card, null, /*#__PURE__*/React.createElement("div", {
     className: "grid grid-cols-10 gap-1.5"
   }, last30.map(d => {
