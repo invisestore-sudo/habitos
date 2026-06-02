@@ -1,5 +1,5 @@
 /* HabitPlan — Service Worker (PWA install + offline shell) */
-const CACHE = 'habitplan-v1';
+const CACHE = 'habitplan-v2';
 const SHELL = [
   './',
   './index.html',
