@@ -433,34 +433,6 @@ function(a,b,c){if(!Vd(b))throw Error(m(200));return Wd(null,a,b,!1,c)};Q.unmoun
   var LS_KEY = 'invise.key';
   var PREFIX = 'hm.v1.';
 
-  // ╔══════════════════════════════════════════════════════════════╗
-  // ║  TEMPORARY BYPASS — remover este bloco para reativar gate  ║
-  // ╚══════════════════════════════════════════════════════════════╝
-  (function bypassGate() {
-    var uid = 'invise-bypass';
-    var usersRaw = localStorage.getItem(PREFIX + 'users');
-    var users = [];
-    try { users = usersRaw ? JSON.parse(usersRaw) : []; } catch(e) {}
-    if (!users.find(function(u) { return u.id === uid; })) {
-      users.push({
-        id: uid, name: 'Usuário',
-        email: 'bypass@local',
-        passwordHash: '', salt: '',
-        createdAt: new Date().toISOString(),
-        xp: 0, level: 1, badges: [],
-        preferences: { theme: 'system', weekStart: 1 }
-      });
-      localStorage.setItem(PREFIX + 'users', JSON.stringify(users));
-    }
-    localStorage.setItem(PREFIX + 'session', JSON.stringify(uid));
-    window.__INVISE_KEY = 'BYPASS';
-    window.__INVISE_USER = uid;
-    var g = document.getElementById('invise-gate'); if (g) g.remove();
-    return;
-  })();
-  return; // TEMPORARY BYPASS — apagar esta linha para reativar
-  // ═══════════════════ FIM DO BYPASS ═══════════════════════════
-
   document.body.classList.add('invise-locked');
 
   function deviceId() {
@@ -606,17 +578,163 @@ function load(key, fallback) {
 function save(key, value) {
   try {
     localStorage.setItem(key, JSON.stringify(value));
+    Cloud.onLocalChange(key);
   } catch (e) {
     console.error('storage write failed', e);
   }
 }
 function removeKey(key) {
   localStorage.removeItem(key);
+  Cloud.onLocalChange(key);
 }
 function uid() {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID();
   return 'id-' + Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
+
+/* ---------------- cloud sync ----------------
+   Sincroniza os dados do usuário (chave INVS-...) com o backend.
+   Mesmo contrato do FinApp, mas com app: 'habitos':
+     GET  /api/data?key=<key>&app=habitos          → puxa ao iniciar
+     POST /api/data { key, app, data, updatedAt }  → salva (debounce 1.5s)
+   Last-write-wins: o lado com maior updatedAt vence. */
+const Cloud = (() => {
+  const API = (window.INVISE_API || 'https://invisestore-backend.onrender.com').replace(/\/$/, '');
+  const APP = 'habitos';
+  const META_KEY = PREFIX + 'cloudMeta'; // { [userId]: updatedAt }
+  // Chaves cujo conteúdo faz parte dos dados sincronizados da conta.
+  const SYNCED = [Keys.habits, Keys.habitLogs, Keys.goals, Keys.users];
+  let pushTimer = null;
+  let pushing = false;
+  let pulled = false;        // só empurra depois do primeiro pull (remoto vence)
+  let pendingChange = false; // houve alteração local enquanto carregava
+
+  function active() {
+    const k = window.__INVISE_KEY;
+    return !!k && k !== 'BYPASS';
+  }
+  function readArr(key) {
+    try { return JSON.parse(localStorage.getItem(key) || '[]'); } catch { return []; }
+  }
+  function getMeta(userId) {
+    try { return (JSON.parse(localStorage.getItem(META_KEY) || '{}')[userId]) || 0; } catch { return 0; }
+  }
+  function setMeta(userId, ts) {
+    let m = {};
+    try { m = JSON.parse(localStorage.getItem(META_KEY) || '{}'); } catch {}
+    m[userId] = ts;
+    localStorage.setItem(META_KEY, JSON.stringify(m));
+  }
+
+  // Coleta a fatia de dados do usuário atual. Remove hashes de senha do perfil
+  // (não há motivo para enviá-los à nuvem).
+  function snapshot(userId) {
+    const users = readArr(Keys.users);
+    const found = users.find(u => u.id === userId) || null;
+    let user = null;
+    if (found) {
+      user = Object.assign({}, found);
+      delete user.passwordHash;
+      delete user.salt;
+    }
+    return {
+      habits: readArr(Keys.habits).filter(h => h.userId === userId),
+      habitLogs: readArr(Keys.habitLogs).filter(l => l.userId === userId),
+      goals: readArr(Keys.goals).filter(g => g.userId === userId),
+      user,
+    };
+  }
+
+  // Aplica a fatia remota substituindo apenas os itens deste usuário. Escreve
+  // direto no localStorage (sem passar por save()) para não disparar um push.
+  function applyRemote(userId, snap) {
+    const mergeArr = (key, incoming) => {
+      const others = readArr(key).filter(x => x.userId !== userId);
+      localStorage.setItem(key, JSON.stringify(others.concat(incoming || [])));
+    };
+    mergeArr(Keys.habits, snap.habits);
+    mergeArr(Keys.habitLogs, snap.habitLogs);
+    mergeArr(Keys.goals, snap.goals);
+    if (snap.user) {
+      const users = readArr(Keys.users);
+      const i = users.findIndex(u => u.id === userId);
+      if (i >= 0) users[i] = Object.assign({}, users[i], snap.user, { id: userId });
+      else users.push(Object.assign({}, snap.user, { id: userId }));
+      localStorage.setItem(Keys.users, JSON.stringify(users));
+    }
+  }
+
+  function schedulePush() {
+    if (!active() || !pulled) return;
+    if (pushTimer) clearTimeout(pushTimer);
+    pushTimer = setTimeout(push, 1500);
+  }
+
+  async function push() {
+    if (!active() || pushing) return;
+    const userId = window.__INVISE_USER;
+    if (!userId) return;
+    pushing = true;
+    const ts = Date.now();
+    setMeta(userId, ts);
+    try {
+      await fetch(API + '/api/data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: window.__INVISE_KEY, app: APP, data: snapshot(userId), updatedAt: ts }),
+      });
+    } catch (e) { /* offline: fica salvo no localStorage e sincroniza depois */ }
+    finally { pushing = false; }
+  }
+
+  async function pull(userId) {
+    try {
+      const url = API + '/api/data?key=' + encodeURIComponent(window.__INVISE_KEY) + '&app=' + APP;
+      const r = await fetch(url);
+      if (!r.ok) return null;
+      const json = await r.json();
+      if (!json || !json.data) return { data: null, updatedAt: json && json.updatedAt || 0 };
+      return { data: json.data, updatedAt: json.updatedAt || 0 };
+    } catch (e) { return null; }
+  }
+
+  // Chamado por save()/removeKey() em cada escrita.
+  function onLocalChange(key) {
+    if (!active() || !SYNCED.includes(key)) return;
+    if (!pulled) { pendingChange = true; return; }
+    schedulePush();
+  }
+
+  async function init() {
+    if (!active()) return;
+    const userId = window.__INVISE_USER;
+    if (!userId) return;
+    const localTs = getMeta(userId);
+    const remote = await pull(userId);
+
+    if (remote && remote.data && remote.updatedAt > localTs) {
+      // Remoto é mais recente: aplica e recarrega para o app ler os dados novos.
+      // setMeta == remote.updatedAt evita loop (no reload, remoto não será > local).
+      applyRemote(userId, remote.data);
+      setMeta(userId, remote.updatedAt);
+      pulled = true;
+      location.reload();
+      return;
+    }
+
+    pulled = true;
+    if (!remote || !remote.data) {
+      // Nada na nuvem ainda: cria o registro com o estado local.
+      push();
+    } else if (localTs > remote.updatedAt || pendingChange) {
+      // Local está à frente (ou houve edição durante o carregamento).
+      push();
+    }
+  }
+
+  return { init, onLocalChange };
+})();
+Cloud.init();
 
 /* ---------------- date utils ---------------- */
 const todayKey = (d = new Date()) => formatYMD(d);
